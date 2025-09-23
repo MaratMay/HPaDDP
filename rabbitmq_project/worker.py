@@ -95,7 +95,7 @@ class Worker:
                     self.worker_file_paths = file_paths[self.my_number:: self.number_workers]
                     self.load_method = 'e'
                 else:
-                    self.worker_file_paths = file_paths[1:] if self.my_number == 0 else [file_paths[0]]
+                    self.worker_file_paths = file_paths[self.number_workers:] if self.my_number == 0 else [file_paths[self.my_number - 1]]
                     self.load_method = 'u'
                 self.rmq_channel.basic_publish(exchange='', routing_key='from_worker_to_manager', body='')
 
