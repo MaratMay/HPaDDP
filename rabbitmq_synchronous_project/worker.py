@@ -30,12 +30,13 @@ def replace_first_three_columns(line):
 class Worker:
     def __init__(self, k, n):
         self.my_number = k
+        self.my_abs_number = k % n
         self.number_workers = n
         self.command = None
         self.load_method = None
         self.worker_file_paths = []
 
-        self.timeout_duration = 5
+        self.timeout_duration = 2
 
         self.state = "WORKING" if self.my_number < self.number_workers else 'REPLICA' #WORKING or REPLICA or WORKING_ALONE
         self.my_sibling = (self.my_number + self.number_workers) % (2 * self.number_workers)
@@ -89,17 +90,12 @@ class Worker:
         return results
 
     def run(self):
-        flag_after_funeral = False
-
         def on_timeout():
             self.rmq_channel.stop_consuming()
             self.state = 'WORKING_ALONE'
 
         while True:
-            if not flag_after_funeral:
-                self.get_work_from_client()
-            else:
-                flag_after_funeral = False
+            self.get_work_from_client()
 
             parts = self.command.split()
             cmd = parts[0].lower()
@@ -116,9 +112,6 @@ class Worker:
                 self.rmq_channel.basic_consume(queue=self.sibling_queue, auto_ack=True, on_message_callback=sibling_is_alive)
                 self.rmq_channel.start_consuming()
 
-                if self.state == 'WORKING_ALONE':
-                    flag_after_funeral = True
-                    print(f"Хранитель №{self.my_number} установил не активность хранителя №{self.my_sibling}. Таймаут {self.timeout_duration} секунд!")
 
             if cmd == "find" and self.state != 'REPLICA':
                 if self.load_method == "e" or self.my_number <= 1:
@@ -137,10 +130,13 @@ class Worker:
                 file_paths.sort(key=lambda x: os.path.getsize(x), reverse=True)
 
                 if parts[2].lower() == 'e' or self.number_workers == 1:
-                    self.worker_file_paths = file_paths[self.my_number:: self.number_workers]
+                    self.worker_file_paths = file_paths[self.my_abs_number:: self.number_workers]
                     self.load_method = 'e'
                 else:
-                    self.worker_file_paths = file_paths[self.number_workers:] if self.my_number == 0 else [file_paths[self.my_number - 1]]
+                    if self.my_abs_number == 0:
+                        self.worker_file_paths = file_paths[self.number_workers:]
+                    else:
+                        self.worker_file_paths = [file_paths[self.my_abs_number - 1]]
                     self.load_method = 'u'
 
                 if self.state != 'REPLICA':
